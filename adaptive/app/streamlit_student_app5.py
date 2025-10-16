@@ -63,12 +63,38 @@ def calculate_learning_gains(df_logs):
 st.set_page_config("Adaptive Java Learning", layout="wide")
 
 # --- Data Loading ---
+# @st.cache_data
+# def load_data():
+#     try:
+#         df = pd.read_csv("data/java_question_bank_with_topics_cleaned_gpt.csv", encoding="latin1")
+#     except FileNotFoundError:
+#         st.error("Error: Data file not found.")
+#         return pd.DataFrame()
+
+#     topic_order = [
+#         "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
+#         "Loops", "Methods", "Arrays", "Object-Oriented Programming",
+#         "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
+#         "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
+#     ]
+#     df['topic'] = pd.Categorical(df['topic'], categories=topic_order, ordered=True)
+#     df['bloom_level'] = pd.Categorical(df['bloom_level'], categories=df['bloom_level'].unique(), ordered=True)
+#     return df.sort_values(['topic', 'bloom_level'])
+# --- Data Loading ---
 @st.cache_data
 def load_data():
+    # Get path relative to this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(script_dir, "..", "data", "java_question_bank_with_topics_cleaned_gpt.csv")
+
+    if not os.path.exists(data_path):
+        st.error(f"Error: Data file not found at {data_path}")
+        return pd.DataFrame()
+
     try:
-        df = pd.read_csv("data/java_question_bank_with_topics_cleaned_gpt.csv", encoding="latin1")
-    except FileNotFoundError:
-        st.error("Error: Data file not found.")
+        df = pd.read_csv(data_path, encoding="latin1")
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
         return pd.DataFrame()
 
     topic_order = [
@@ -77,9 +103,15 @@ def load_data():
         "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
         "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
     ]
-    df['topic'] = pd.Categorical(df['topic'], categories=topic_order, ordered=True)
-    df['bloom_level'] = pd.Categorical(df['bloom_level'], categories=df['bloom_level'].unique(), ordered=True)
-    return df.sort_values(['topic', 'bloom_level'])
+
+    df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
+    df["bloom_level"] = pd.Categorical(df["bloom_level"].astype(str),
+                                       categories=df["bloom_level"].dropna().unique(),
+                                       ordered=True)
+
+    return df.sort_values(["topic", "bloom_level"])
+
+
 
 # Inject CSS to remove syntax highlighting colors
 st.markdown(
@@ -506,6 +538,14 @@ def render_teacher_view():
 
 if __name__ == "__main__":
     main()
+    
+def run_student_mode():
+    df = load_data()
+    if df.empty:
+        st.warning("No data available. Please check the CSV file.")
+        return
+    initialize_session_state()
+    render_student_view(df)
 
 
 
