@@ -1,0 +1,8 @@
+timestamp,session_id,topic,bloom_level,question_id,confidence,correct,reinforcement
+1759717618.1587312,1759717610,Basic Syntax,Understand,199,3,False,⬆️ Progressing to: Understand
+1759717625.8246934,1759717610,Basic Syntax,Understand,93,3,False,⬆️ Progressing to: Understand
+1759717633.9071958,1759717610,Basic Syntax,Understand,80,3,False,⬆️ Progressing to: Understand
+1759717654.4426386,1759717610,Basic Syntax,Understand,54,3,True,⬆️ Progressing to: Understand
+1759717668.964035,1759717610,Basic Syntax,Understand,90,3,False,⬆️ Progressing to: Understand
+1759718170.6584954,1759717610,Basic Syntax,Understand,43,3,False,⬆️ Progressing to: Understand
+1759718178.9343295,1759717610,Basic Syntax,Understand,42,3,False,⬆️ Progressing to: Understand

@@ -5,6 +5,31 @@ import time
 import matplotlib
 
 
+# --- Session State ---
+def initialize_session_state():
+    defaults = {
+        "started": False,
+        "log": [],
+        "bookmarked": set(),
+        "score": {},
+        "wrong_qs": [],
+        "confidence_record": {},
+        "topic_mastery": {},
+        "asked_qs": set(),
+        "submitted": False,
+        "current_question": None,
+        "current_reason": "",
+        "review_mode": False,
+        "remediation_queue": [],
+        "session_id": str(int(time.time()))
+    }
+    for k, v in defaults.items():
+        st.session_state.setdefault(k, v)
+
+initialize_session_state()
+
+
+
 # --- DIFFICULTY MODELING ---
 def calculate_difficulty(df_logs):
     """Assigns and refines difficulty weights for each question."""
@@ -53,12 +78,7 @@ def calculate_learning_gains(df_logs):
     gain["learning_gain"] = (gain["last"] - gain["first"]) * 100
     return df_logs, gain
 
-
-
-
-
-
-
+  ##
 # --- Configuration ---
 st.set_page_config("Adaptive Java Learning", layout="wide")
 
@@ -132,25 +152,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Session State ---
-def initialize_session_state():
-    defaults = {
-        "started": False,
-        "log": [],
-        "bookmarked": set(),
-        "score": {},
-        "confidence_record": {},
-        "topic_mastery": {},
-        "asked_qs": set(),
-        "submitted": False,
-        "current_question": None,
-        "current_reason": "",
-        "review_mode": False,
-        "remediation_queue": [],
-        "session_id": str(int(time.time()))
-    }
-    for k, v in defaults.items():
-        st.session_state.setdefault(k, v)
+ 
 
 # --- Adaptive BBPS Logic ---
 def get_next_question(topic_df, selected_topic):
@@ -221,8 +223,9 @@ def render_sidebar(topics):
 
     return role, selected_topic
 
-
-
+##############################
+# Student View
+##############################
 
 def render_student_view(df):
     topics = df["topic"].dropna().unique().tolist()
@@ -272,7 +275,9 @@ def render_student_view(df):
 
 def display_question(q, topic):
     st.info(st.session_state.current_reason)
-    st.markdown(f"**Bloom:** `{q['bloom_level']}` | **Sub-Concept:** `{q.get('sub_concept', 'General')}`")
+    st.markdown(f"**Bloom:** '{q['bloom_level']}' | **Question Id:** '{q['question_id']}') | **Sub-Concept:** '{q.get('sub_concept', 'General')}' ")
+    
+    
     st.code(q['question_stem'], language='java')
 
     choice = st.radio("Choose:", ["a", "b", "c", "d"], index=None,
@@ -291,11 +296,6 @@ def display_question(q, topic):
     }
     st.markdown(f"**Selected Confidence:** {confidence_labels[confidence]}")
 
-
-
-
-
-
     submit_col, bookmark_col = st.columns(2)
     if bookmark_col.button("🔖 Bookmark", use_container_width=True):
         st.session_state.bookmarked.add(q['question_id'])
@@ -307,7 +307,7 @@ def display_question(q, topic):
         else:
             handle_submission(q, choice, confidence, topic)
             st.session_state.submitted = True
-            st.rerun()
+            # st.rerun()
 
     if st.session_state.submitted:
         if st.button("➡️ Next Question"):
@@ -315,19 +315,69 @@ def display_question(q, topic):
             st.session_state.current_question = None
             st.rerun()
 
+# def handle_submission(q, choice, confidence, topic):
+#     correct = q["correct_option"].strip().lower()
+#     is_correct = (choice == correct)
+#     bloom = q["bloom_level"]
+#     points = 0.5 + (confidence / 10.0) if is_correct else 0
+
+#     if is_correct:
+#         st.success(f"Correct! +{points:.2f} points.")
+#     else:
+#         st.error(f"Wrong. Correct: **{correct.upper()}**")
+#         if confidence >= 4 and pd.notna(q.get('sub_concept')):
+#             st.session_state.remediation_queue.append(q['sub_concept'])
+
+#     if not st.session_state.review_mode:
+#         st.session_state.topic_mastery[topic][bloom] += points
+#         st.session_state.score[topic][bloom]["total"] += 1
+#         st.session_state.score[topic][bloom]["correct"] += int(is_correct)
+#         st.session_state.confidence_record[topic].setdefault(bloom, []).append({
+#             'question_id': q['question_id'],
+#             'confidence': confidence,
+#             'correct': is_correct
+#         })
+
+#     # Log result
+#     st.session_state.log.append({
+#         # "timestamp": time.time(),
+#         "timestamp": pd.Timestamp.now().isoformat(),
+#         "session_id": st.session_state.session_id,
+#         "topic": topic,
+#         "bloom_level": bloom,
+#         "question_id": q['question_id'],
+#         "confidence": confidence,
+#         "correct": is_correct,
+#         "reinforcement": st.session_state.current_reason
+#     })
+
+#     # Explanation
+#     with st.expander("📘 Explanation"):
+#         st.markdown(q['main_explanation'])
+
+#     # Save logs to CSV
+#     log_df = pd.DataFrame(st.session_state.log)
+#     os.makedirs("logs", exist_ok=True)
+#     log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
+#     check_for_bloom_badge(topic, bloom)
+
+
 def handle_submission(q, choice, confidence, topic):
+    """Handles the logic after a user submits an answer."""
     correct = q["correct_option"].strip().lower()
     is_correct = (choice == correct)
     bloom = q["bloom_level"]
     points = 0.5 + (confidence / 10.0) if is_correct else 0
 
     if is_correct:
-        st.success(f"Correct! +{points:.2f} points.")
+        st.success("✅ Correct!")
+        if not st.session_state.review_mode:
+            st.session_state.topic_mastery[q['topic']][q['bloom_level']] += 1
     else:
-        st.error(f"Wrong. Correct: **{correct.upper()}**")
-        if confidence >= 4 and pd.notna(q.get('sub_concept')):
-            st.session_state.remediation_queue.append(q['sub_concept'])
-
+        st.error(f"❌ Incorrect. The correct answer is **{correct.upper()}**.")
+        if not st.session_state.review_mode:
+            st.session_state.wrong_qs.append(q["question_id"])
+            
     if not st.session_state.review_mode:
         st.session_state.topic_mastery[topic][bloom] += points
         st.session_state.score[topic][bloom]["total"] += 1
@@ -338,22 +388,26 @@ def handle_submission(q, choice, confidence, topic):
             'correct': is_correct
         })
 
-    # Log result
-    st.session_state.log.append({
-        # "timestamp": time.time(),
-        "timestamp": pd.Timestamp.now().isoformat(),
-        "session_id": st.session_state.session_id,
-        "topic": topic,
-        "bloom_level": bloom,
-        "question_id": q['question_id'],
-        "confidence": confidence,
-        "correct": is_correct,
-        "reinforcement": st.session_state.current_reason
-    })
+    with st.expander("View Explanation"):
+        st.markdown(f"{q['main_explanation']}")
 
-    # Explanation
-    with st.expander("📘 Explanation"):
-        st.markdown(q['main_explanation'])
+    # Update scores and log
+    score = st.session_state.score[q['topic']][q['bloom_level']]
+    score['total'] += 1
+    if is_correct:
+        score['correct'] += 1
+
+    log_entry = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "topic": q["topic"],
+        "bloom_level": q["bloom_level"],
+        "question_id": q["question_id"],
+        "selected": choice,
+        "correct_option": correct,
+        "is_correct": is_correct
+    }
+    st.session_state.log.append(log_entry)
+    
 
     # Save logs to CSV
     log_df = pd.DataFrame(st.session_state.log)
@@ -361,7 +415,15 @@ def handle_submission(q, choice, confidence, topic):
     log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
     check_for_bloom_badge(topic, bloom)
 
-
+def display_topic_completion_summary(selected_topic):
+    """Displays a summary when a topic is completed."""
+    st.success(f"🎉 You've completed the topic: {selected_topic}!")
+    st.balloons()
+    
+    st.markdown("### 📈 Mastery Progress")
+    mastery_df = pd.DataFrame(st.session_state.topic_mastery[selected_topic], index=["Mastery"]).T
+    st.dataframe(mastery_df)
+    
 # --- MOTIVATION PANEL ---
 def show_motivation_panel(topic):
     st.markdown("### 📈 Your Progress")
