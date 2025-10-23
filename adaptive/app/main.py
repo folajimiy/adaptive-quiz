@@ -1,23 +1,49 @@
 import streamlit as st
+import pandas as pd
+import os
 from streamlit_student_app5 import run_student_mode
 from teacher import run_teacher_mode
 
 # --- Page setup ---
 st.set_page_config(page_title="Adaptive Java Tutor", layout="wide")
 
-# --- Initialize session state ---
+# --- Persistent session state ---
 if "role" not in st.session_state:
     st.session_state.role = None
 if "user_id" not in st.session_state:
     st.session_state.user_id = ""
+if "name" not in st.session_state:
+    st.session_state.name = ""
 if "intro_done" not in st.session_state:
     st.session_state.intro_done = False
 if "awaiting_id" not in st.session_state:
     st.session_state.awaiting_id = False
 
+# --- Paths ---
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(SCRIPT_DIR, "..", "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+CSV_PATH = os.path.join(DATA_DIR, "student_list.csv")
+
+# --- Load existing CSV ---
+if os.path.exists(CSV_PATH):
+    df_students = pd.read_csv(CSV_PATH, dtype=str)
+else:
+    st.error(f"Student list not found at {CSV_PATH}.")
+    st.stop()
+
+# --- Function to save/update student info ---
+def save_student_info(student_id, name):
+    df_students = pd.read_csv(CSV_PATH, dtype=str)
+    if (df_students["student_id"] == student_id).any():
+        if name.strip():
+            df_students.loc[df_students["student_id"] == student_id, "name"] = name.strip()
+    else:
+        df_students = pd.concat([df_students, pd.DataFrame({"student_id": [student_id], "name": [name.strip()]})])
+    df_students.to_csv(CSV_PATH, index=False)
+
 # --- Intro screen ---
 if not st.session_state.intro_done:
-    # Header only shows before continuing
     st.markdown(
         """
         <h1 style='text-align: center; color: #4F8BF9;'>👋 Welcome to 
@@ -27,7 +53,6 @@ if not st.session_state.intro_done:
         """,
         unsafe_allow_html=True
     )
-
     st.divider()
 
     # --- Role selection ---
@@ -46,28 +71,59 @@ if not st.session_state.intro_done:
             st.session_state.role = "Teacher"
             st.session_state.awaiting_id = True
 
-    # --- ID input (same run, no rerun issue) ---
-    if st.session_state.awaiting_id:
-        st.divider()
-        user_id = st.text_input(f"Enter your {st.session_state.role} ID:", key="user_id_input")
-        continue_clicked = st.button("Continue", key="continue_btn")
+    # --- ID input ---
+if st.session_state.awaiting_id:
+    st.divider()
+    user_id = st.text_input(f"Enter your {st.session_state.role} ID:", key="user_id_input")
 
-        if continue_clicked and user_id.strip():
+    # Check if ID exists in CSV
+    id_exists = user_id in df_students["student_id"].values
+    existing_name = ""
+    if id_exists:
+        existing_name = df_students.loc[df_students["student_id"] == user_id, "name"].values[0]
+        if pd.isna(existing_name):  # convert NaN to empty string
+            existing_name = ""
+
+    # Only show name input if ID is valid but name is blank
+    show_name_input = id_exists and existing_name.strip() == ""
+
+    if show_name_input:
+        name = st.text_input("Enter your name:", key="name_input")
+    else:
+        name = existing_name  # use existing name or leave blank if ID invalid
+
+    # Validate
+    valid_id = id_exists
+    if user_id.strip() and not valid_id:
+        st.warning("❌ Invalid Student ID. Please enter a valid ID from the list.")
+
+    if st.button("Continue", key="continue_btn"):
+        if not user_id.strip():
+            st.warning("Please enter your ID to continue.")
+        elif show_name_input and not name.strip():
+            st.warning("Please enter your name for the first-time login.")
+        elif not valid_id:
+            st.warning("Invalid ID. Cannot continue.")
+        else:
             st.session_state.user_id = user_id.strip()
+            st.session_state.name = name.strip()
+            if st.session_state.role == "Student" and show_name_input:
+                save_student_info(st.session_state.user_id, st.session_state.name)
             st.session_state.intro_done = True
             st.session_state.awaiting_id = False
-            st.rerun()  # ✅ triggers next screen immediately
-        elif continue_clicked:
-            st.warning("Please enter your ID to continue.")
-    st.stop()
+            st.rerun()
 
-# --- Main app logic ---
+
+    st.stop()  # stops only intro
+
+# --- Main app logic (after intro) ---
+st.divider()
+
 if st.session_state.role == "Student":
+    st.success(f"👋 Welcome, {st.session_state.name} (ID: {st.session_state.user_id})!")
     run_student_mode()
 elif st.session_state.role == "Teacher":
     st.info("👩‍🏫 Teacher mode not implemented yet.")
     run_teacher_mode()
 else:
     st.warning("Please select a role to continue.")
-
-

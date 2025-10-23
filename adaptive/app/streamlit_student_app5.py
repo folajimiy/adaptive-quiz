@@ -397,23 +397,53 @@ def handle_submission(q, choice, confidence, topic):
     if is_correct:
         score['correct'] += 1
 
+    student_id = st.session_state.get("user_id", "unknown_student")
+    session_id = st.session_state.get("session_id", "unknown_session")
+
+    # Prepare log entry
     log_entry = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "topic": q["topic"],
-        "bloom_level": q["bloom_level"],
+        "student_id": student_id,
+        "session_id": session_id,
+        "topic": topic,
+        "bloom_level": bloom,
         "question_id": q["question_id"],
         "selected": choice,
         "correct_option": correct,
-        "is_correct": is_correct
+        "is_correct": is_correct,
+        "confidence": confidence,
+        "reinforcement_reason": st.session_state.get("current_reason", "")
     }
+
+    # Add this entry to in-memory log list
     st.session_state.log.append(log_entry)
-    
+
+    # === Absolute path: go back one directory from current file ===
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(base_dir, ".."))  # one level up
+    data_dir = os.path.join(project_root, "logs")
+    os.makedirs(data_dir, exist_ok=True)
+
+    # === Unified file per student ===
+    student_csv = os.path.join(data_dir, f"student_{student_id}.csv")
+
+    # Convert log to DataFrame and save (append mode)
+    log_df = pd.DataFrame(st.session_state.log)
+
+    if os.path.exists(student_csv):
+        existing = pd.read_csv(student_csv)
+        combined = pd.concat([existing, log_df], ignore_index=True)
+        combined.to_csv(student_csv, index=False)
+    else:
+        log_df.to_csv(student_csv, index=False)
 
     # Save logs to CSV
-    log_df = pd.DataFrame(st.session_state.log)
-    os.makedirs("logs", exist_ok=True)
-    log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
-    check_for_bloom_badge(topic, bloom)
+    # log_df = pd.DataFrame(st.session_state.log)
+    # os.makedirs("logs", exist_ok=True)
+    # log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
+    # check_for_bloom_badge(topic, bloom)
+    
+
 
 def display_topic_completion_summary(selected_topic):
     """Displays a summary when a topic is completed."""
