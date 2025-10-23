@@ -117,11 +117,30 @@ def load_data():
         st.error(f"Error reading CSV: {e}")
         return pd.DataFrame()
 
+    # topic_order = [
+    #     "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
+    #     "Loops", "Methods", "Arrays", "Object-Oriented Programming",
+    #     "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
+    #     "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
+    # ]
+    
     topic_order = [
-        "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
-        "Loops", "Methods", "Arrays", "Object-Oriented Programming",
-        "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
-        "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
+    #level 1 beginner
+    "Basic Syntax",
+    "Control Structures",
+    "Loops",
+    "Arrays",
+    "Strings",
+    "Methods and Parameter Passing",
+    "File I/O and Exception Handling",
+    #level 2 intermediate
+    "Classes and Objects",
+    "Encapsulation and Access Modifiers",
+    "Inheritance and Polymorphism",
+    "Abstract Classes and Interfaces",
+    #level 3 advanced
+    "Collections",
+    "Generics"
     ]
 
     df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
