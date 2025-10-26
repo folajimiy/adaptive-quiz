@@ -83,23 +83,74 @@ def calculate_learning_gains(df_logs):
 st.set_page_config("Adaptive Java Learning", layout="wide")
 
 # --- Data Loading ---
+# @st.cache_data
+# def load_data():
+#     try:
+#         df = pd.read_csv("data/java_question_bank_with_topics_cleaned_gpt.csv", encoding="latin1")
+#     except FileNotFoundError:
+#         st.error("Error: Data file not found.")
+#         return pd.DataFrame()
+
+#     topic_order = [
+#         "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
+#         "Loops", "Methods", "Arrays", "Object-Oriented Programming",
+#         "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
+#         "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
+#     ]
+#     df['topic'] = pd.Categorical(df['topic'], categories=topic_order, ordered=True)
+#     df['bloom_level'] = pd.Categorical(df['bloom_level'], categories=df['bloom_level'].unique(), ordered=True)
+#     return df.sort_values(['topic', 'bloom_level'])
+# --- Data Loading ---
 @st.cache_data
 def load_data():
-    try:
-        df = pd.read_csv("data/java_question_bank_with_topics_cleaned_gpt.csv", encoding="latin1")
-    except FileNotFoundError:
-        st.error("Error: Data file not found.")
+    # Get path relative to this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(script_dir, "..", "data", "java_question_bank_with_topics_cleaned_gpt.csv")
+
+    if not os.path.exists(data_path):
+        st.error(f"Error: Data file not found at {data_path}")
         return pd.DataFrame()
 
+    try:
+        df = pd.read_csv(data_path, encoding="latin1")
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
+        return pd.DataFrame()
+
+    # topic_order = [
+    #     "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
+    #     "Loops", "Methods", "Arrays", "Object-Oriented Programming",
+    #     "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
+    #     "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
+    # ]
+    
     topic_order = [
-        "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
-        "Loops", "Methods", "Arrays", "Object-Oriented Programming",
-        "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
-        "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
+    #level 1 beginner
+    "Basic Syntax",
+    "Control Structures",
+    "Loops",
+    "Arrays",
+    "Strings",
+    "Methods and Parameter Passing",
+    "File I/O and Exception Handling",
+    #level 2 intermediate
+    "Classes and Objects",
+    "Encapsulation and Access Modifiers",
+    "Inheritance and Polymorphism",
+    "Abstract Classes and Interfaces",
+    #level 3 advanced
+    "Collections",
+    "Generics"
     ]
-    df['topic'] = pd.Categorical(df['topic'], categories=topic_order, ordered=True)
-    df['bloom_level'] = pd.Categorical(df['bloom_level'], categories=df['bloom_level'].unique(), ordered=True)
-    return df.sort_values(['topic', 'bloom_level'])
+
+    df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
+    df["bloom_level"] = pd.Categorical(df["bloom_level"].astype(str),
+                                       categories=df["bloom_level"].dropna().unique(),
+                                       ordered=True)
+
+    return df.sort_values(["topic", "bloom_level"])
+
+
 
 # Inject CSS to remove syntax highlighting colors
 st.markdown(
@@ -365,23 +416,53 @@ def handle_submission(q, choice, confidence, topic):
     if is_correct:
         score['correct'] += 1
 
+    student_id = st.session_state.get("user_id", "unknown_student")
+    session_id = st.session_state.get("session_id", "unknown_session")
+
+    # Prepare log entry
     log_entry = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "topic": q["topic"],
-        "bloom_level": q["bloom_level"],
+        "student_id": student_id,
+        "session_id": session_id,
+        "topic": topic,
+        "bloom_level": bloom,
         "question_id": q["question_id"],
         "selected": choice,
         "correct_option": correct,
-        "is_correct": is_correct
+        "is_correct": is_correct,
+        "confidence": confidence,
+        "reinforcement_reason": st.session_state.get("current_reason", "")
     }
+
+    # Add this entry to in-memory log list
     st.session_state.log.append(log_entry)
-    
+
+    # === Absolute path: go back one directory from current file ===
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(base_dir, ".."))  # one level up
+    data_dir = os.path.join(project_root, "logs")
+    os.makedirs(data_dir, exist_ok=True)
+
+    # === Unified file per student ===
+    student_csv = os.path.join(data_dir, f"student_{student_id}.csv")
+
+    # Convert log to DataFrame and save (append mode)
+    log_df = pd.DataFrame(st.session_state.log)
+
+    if os.path.exists(student_csv):
+        existing = pd.read_csv(student_csv)
+        combined = pd.concat([existing, log_df], ignore_index=True)
+        combined.to_csv(student_csv, index=False)
+    else:
+        log_df.to_csv(student_csv, index=False)
 
     # Save logs to CSV
-    log_df = pd.DataFrame(st.session_state.log)
-    os.makedirs("logs", exist_ok=True)
-    log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
-    check_for_bloom_badge(topic, bloom)
+    # log_df = pd.DataFrame(st.session_state.log)
+    # os.makedirs("logs", exist_ok=True)
+    # log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
+    # check_for_bloom_badge(topic, bloom)
+    
+
 
 def display_topic_completion_summary(selected_topic):
     """Displays a summary when a topic is completed."""
@@ -568,6 +649,14 @@ def render_teacher_view():
 
 if __name__ == "__main__":
     main()
+    
+def run_student_mode():
+    df = load_data()
+    if df.empty:
+        st.warning("No data available. Please check the CSV file.")
+        return
+    initialize_session_state()
+    render_student_view(df)
 
 
 
