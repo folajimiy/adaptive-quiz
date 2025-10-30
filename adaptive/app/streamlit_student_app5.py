@@ -218,21 +218,36 @@ def get_next_question(topic_df, selected_topic):
 # --- UI ---
 def render_sidebar(topics):
     st.sidebar.title("📚 Adaptive Java Practice")
+    
+    # Role selection
     role = st.sidebar.radio("Select Role", ["Student", "Teacher"])
+    
+    # Topic selection
     selected_topic = st.sidebar.selectbox("📘 Choose a Topic", topics)
 
-    if st.sidebar.button("🔄 Reset Session"):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
-
+    # Review bookmarked
     if st.sidebar.button("🔖 Review Bookmarked"):
         st.session_state.review_mode = True
         st.session_state.submitted = False
         st.session_state.current_question = None
         st.rerun()
-        
+
+    # Back to Main Menu
+    if st.sidebar.button("⬅️ Back to Main Menu"):
+        st.session_state.selected_mode = None
+        st.session_state.started = False
+        st.session_state.current_question = None
+        st.session_state.submitted = False
+        st.session_state.review_mode = False
+        st.rerun()
     
+    # Reset session
+    if st.sidebar.button("🔄 Reset Session"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    
+    # Teacher view
     if role == "Teacher":
         st.session_state.started = False
         st.session_state.review_mode = False
@@ -240,8 +255,8 @@ def render_sidebar(topics):
         render_teacher_view()
         st.stop()
 
-
     return role, selected_topic
+
 
 ##############################
 # Student View
