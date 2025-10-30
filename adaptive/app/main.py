@@ -14,6 +14,8 @@ if "user_id" not in st.session_state:
     st.session_state.user_id = ""
 if "name" not in st.session_state:
     st.session_state.name = ""
+if "level" not in st.session_state:  # Experience level
+    st.session_state.level = ""
 if "intro_done" not in st.session_state:
     st.session_state.intro_done = False
 if "awaiting_id" not in st.session_state:
@@ -33,13 +35,18 @@ else:
     st.stop()
 
 # --- Function to save/update student info ---
-def save_student_info(student_id, name):
+def save_student_info(student_id, name, level=None):
     df_students = pd.read_csv(CSV_PATH, dtype=str)
     if (df_students["student_id"] == student_id).any():
         if name.strip():
             df_students.loc[df_students["student_id"] == student_id, "name"] = name.strip()
+        if level:
+            df_students.loc[df_students["student_id"] == student_id, "level"] = level
     else:
-        df_students = pd.concat([df_students, pd.DataFrame({"student_id": [student_id], "name": [name.strip()]})])
+        data = {"student_id": [student_id], "name": [name.strip()]}
+        if level:
+            data["level"] = [level]
+        df_students = pd.concat([df_students, pd.DataFrame(data)], ignore_index=True)
     df_students.to_csv(CSV_PATH, index=False)
 
 # --- Intro screen ---
@@ -71,65 +78,74 @@ if not st.session_state.intro_done:
             st.session_state.role = "Teacher"
             st.session_state.awaiting_id = True
 
-# --- ID & Name Form ---
+# --- ID, Name & Level Form ---
 if st.session_state.awaiting_id:
     st.divider()
 
     id_exists = False
     existing_name = ""
+    existing_level = ""
     show_name_input = False
+    show_level_input = False
 
     # --- Form ---
     with st.form(key="login_form", clear_on_submit=False):
         user_id = st.text_input(f"Enter your {st.session_state.role} ID:")
-        
-        # Only check for name after user enters something
-        if user_id.strip():
-            id_exists = user_id in df_students["student_id"].values
-            if id_exists:
-                existing_name = df_students.loc[df_students["student_id"] == user_id, "name"].values[0]
-                if pd.isna(existing_name):
-                    existing_name = ""
-                show_name_input = existing_name.strip() == ""
 
-        if show_name_input:
-            name = st.text_input("Enter your name:")
+        id_exists = user_id.strip() in df_students["student_id"].values
+        if id_exists:
+            existing_name = df_students.loc[df_students["student_id"] == user_id, "name"].values[0]
+            existing_name = "" if pd.isna(existing_name) else str(existing_name)
+            existing_level = df_students.loc[df_students["student_id"] == user_id, "level"].values[0] if "level" in df_students.columns else ""
+            existing_level = "" if pd.isna(existing_level) else str(existing_level)
+            show_name_input = existing_name.strip() == ""
+            show_level_input = existing_level.strip() == ""
+        elif user_id.strip():
+            show_name_input = True
+            show_level_input = True
 
-        submitted = st.form_submit_button("Continue")
-        if submitted:
-            login_message = ""
-            if not user_id.strip():
-                login_message = "Please enter your ID to continue."
-            elif not id_exists:
-                login_message = "❌ Invalid Student ID."
-            elif show_name_input and not name.strip():
-                login_message = "Please enter your name for first-time login."
-            else:
-                # Save first-time name
-                if show_name_input:
-                    save_student_info(user_id, name.strip())
+        name = st.text_input("Enter your name:") if show_name_input else existing_name
+        level = st.radio("Select your experience level:", ("Beginner", "Intermediate", "Advanced")) if show_level_input else existing_level
 
-                # Store session info
-                st.session_state.user_id = user_id.strip()
-                st.session_state.name = name.strip() if show_name_input else existing_name
-                st.session_state.intro_done = True
-                st.session_state.awaiting_id = False
+        submitted = st.form_submit_button("Continue")  # always inside the form
 
-            if login_message:
-                st.warning(login_message)
+    # --- Handle submission ---
+    if submitted:
+        login_message = ""
+        if not user_id.strip():
+            login_message = "Please enter your ID to continue."
+        elif not id_exists and st.session_state.role == "Student":
+            login_message = "❌ Invalid Student ID."
+        elif show_name_input and not name.strip():
+            login_message = "Please enter your name for first-time login."
+        elif show_level_input and not level:
+            login_message = "Please select your experience level."
+        else:
+            # Save new info if needed
+            if show_name_input or show_level_input:
+                save_student_info(user_id, name.strip(), level)
 
+            # Store session info
+            st.session_state.user_id = user_id.strip()
+            st.session_state.name = name.strip()
+            st.session_state.level = level
+            st.session_state.intro_done = True
+            st.session_state.awaiting_id = False
+            st.rerun()
+
+        if login_message:
+            st.warning(login_message)
     st.stop()
-
-
 
 # --- Main app logic (after intro) ---
 st.divider()
 
 if st.session_state.role == "Student":
-    st.success(f"👋 Welcome, {st.session_state.name} (ID: {st.session_state.user_id})!")
+    st.success(f"👋 Welcome, {st.session_state.name} (ID: {st.session_state.user_id}, Level: {st.session_state.level})!")
     run_student_mode()
 elif st.session_state.role == "Teacher":
     st.info("👩‍🏫 Teacher mode not implemented yet.")
     run_teacher_mode()
 else:
     st.warning("Please select a role to continue.")
+

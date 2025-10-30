@@ -381,96 +381,84 @@ def display_question(q, topic):
 #     log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
 #     check_for_bloom_badge(topic, bloom)
 
-def handle_submission(q, choice, confidence, topic):
-    """Handles submission with persistent explanation tracking and logs end time."""
-    qid = q["question_id"]
-    student_id = st.session_state.get("user_id", "unknown_student")
-    session_id = st.session_state.get("session_id", "unknown_session")
-    end_time = pd.Timestamp.now().isoformat()  # End time when submission occurs
 
-    # Determine correctness
-    correct_option = q["correct_option"].strip().lower()
-    is_correct = (choice == correct_option)
+def handle_submission(q, choice, confidence, topic):
+    """Handles logic after a user submits an answer, without tracking explanation clicks, and avoids duplicate CSV entries."""
+
+    # --- Correctness and Scoring ---
+    correct = q["correct_option"].strip().lower()
+    is_correct = (choice == correct)
     bloom = q["bloom_level"]
     points = 0.5 + (confidence / 10.0) if is_correct else 0
 
-    # Update mastery and scores
-    if not st.session_state.review_mode:
-        st.session_state.topic_mastery[topic][bloom] += points
-        st.session_state.score[topic][bloom]["total"] += 1
-        st.session_state.score[topic][bloom]["correct"] += int(is_correct)
-        st.session_state.confidence_record[topic].setdefault(bloom, []).append({
-            'question_id': qid,
-            'confidence': confidence,
-            'correct': is_correct
-        })
-
-    # Feedback
     if is_correct:
-        st.success(f"✅ Correct! +{points:.2f} points")
+        st.success("✅ Correct!")
     else:
-        st.error(f"❌ Incorrect. The correct answer is **{correct_option.upper()}**.")
-        if not st.session_state.review_mode and pd.notna(q.get('sub_concept')):
-            st.session_state.remediation_queue.append(q['sub_concept'])
+        st.error(f"❌ Incorrect. The correct answer is **{correct.upper()}**.")
+        st.session_state.wrong_qs.append(q["question_id"])
 
-    # --- Track explanation viewed based on expander open ---
-    st.session_state.setdefault("explanation_clicked", {})
-    exp_state_key = f"viewed_{qid}"
-    # Default False if not seen
-    st.session_state["explanation_clicked"].setdefault(exp_state_key, False)
+    # --- Update Scores ---
+    st.session_state.topic_mastery[topic][bloom] += points
+    st.session_state.score[topic][bloom]["total"] += 1
+    st.session_state.score[topic][bloom]["correct"] += int(is_correct)
 
-    # Mark viewed if expander is opened
+    # --- Confidence Logging ---
+    st.session_state.confidence_record[topic].setdefault(bloom, []).append({
+        'question_id': q['question_id'],
+        'confidence': confidence,
+        'correct': is_correct
+    })
+
+    # --- Explanation Section ---
     with st.expander("📘 View Explanation", expanded=False):
         st.markdown(q["main_explanation"])
-        # Once the expander renders, mark as viewed
-        st.session_state["explanation_clicked"][exp_state_key] = True
 
-    # "More Info" section
+    # --- More Info Section ---
     with st.expander("🔗 More Info"):
         st.markdown(
-            "Learn more about Java concepts at [W3Schools Java Tutorial](https://www.w3schools.com/java/default.asp)",
+            "Learn more about Java concepts at 👉 [W3Schools Java Tutorial](https://www.w3schools.com/java/default.asp)",
             unsafe_allow_html=True
         )
 
-    # Prepare log entry
+    # --- Logging the Result ---
+    student_id = st.session_state.get("user_id", "unknown_student")
+    session_id = st.session_state.get("session_id", "unknown_session")
+
+    # Initialize logged_questions to prevent duplicates
+    if "logged_questions" not in st.session_state:
+        st.session_state.logged_questions = set()
+
+    qid = q["question_id"]
+    if qid in st.session_state.logged_questions:
+        return  # already logged this question, skip
+
     log_entry = {
-        "timestamp": pd.Timestamp.now().isoformat(),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "student_id": student_id,
         "session_id": session_id,
         "topic": topic,
         "bloom_level": bloom,
         "question_id": qid,
         "selected": choice,
-        "correct_option": correct_option,
+        "correct_option": correct,
         "is_correct": is_correct,
         "confidence": confidence,
-        "explanation_viewed": st.session_state["explanation_clicked"][exp_state_key],
         "reinforcement_reason": st.session_state.get("current_reason", ""),
-        "end_time": end_time
     }
 
-    # Append to in-memory session log
+    # Add to in-memory log and mark as logged
     st.session_state.log.append(log_entry)
+    st.session_state.logged_questions.add(qid)
 
-    # Save to student CSV
+    # --- Save CSV (append only new row) ---
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    logs_dir = os.path.join(os.path.abspath(os.path.join(base_dir, "..")), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    student_csv = os.path.join(logs_dir, f"student_{student_id}.csv")
+    project_root = os.path.abspath(os.path.join(base_dir, ".."))
+    data_dir = os.path.join(project_root, "logs")
+    os.makedirs(data_dir, exist_ok=True)
 
-    log_df = pd.DataFrame(st.session_state.log)
-    if os.path.exists(student_csv):
-        existing = pd.read_csv(student_csv)
-        combined = pd.concat([existing, log_df], ignore_index=True)
-        combined.to_csv(student_csv, index=False)
-    else:
-        log_df.to_csv(student_csv, index=False)
-
-
-
-
-
-
+    student_csv = os.path.join(data_dir, f"student_{student_id}.csv")
+    new_df = pd.DataFrame([log_entry])
+    new_df.to_csv(student_csv, mode='a', header=not os.path.exists(student_csv), index=False)
 
 
     # Save logs to CSV
