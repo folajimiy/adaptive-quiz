@@ -71,50 +71,56 @@ if not st.session_state.intro_done:
             st.session_state.role = "Teacher"
             st.session_state.awaiting_id = True
 
-    # --- ID input ---
+# --- ID & Name Form ---
 if st.session_state.awaiting_id:
     st.divider()
-    user_id = st.text_input(f"Enter your {st.session_state.role} ID:", key="user_id_input")
 
-    # Check if ID exists in CSV
-    id_exists = user_id in df_students["student_id"].values
+    id_exists = False
     existing_name = ""
-    if id_exists:
-        existing_name = df_students.loc[df_students["student_id"] == user_id, "name"].values[0]
-        if pd.isna(existing_name):  # convert NaN to empty string
-            existing_name = ""
+    show_name_input = False
 
-    # Only show name input if ID is valid but name is blank
-    show_name_input = id_exists and existing_name.strip() == ""
+    # --- Form ---
+    with st.form(key="login_form", clear_on_submit=False):
+        user_id = st.text_input(f"Enter your {st.session_state.role} ID:")
+        
+        # Only check for name after user enters something
+        if user_id.strip():
+            id_exists = user_id in df_students["student_id"].values
+            if id_exists:
+                existing_name = df_students.loc[df_students["student_id"] == user_id, "name"].values[0]
+                if pd.isna(existing_name):
+                    existing_name = ""
+                show_name_input = existing_name.strip() == ""
 
-    if show_name_input:
-        name = st.text_input("Enter your name:", key="name_input")
-    else:
-        name = existing_name  # use existing name or leave blank if ID invalid
+        if show_name_input:
+            name = st.text_input("Enter your name:")
 
-    # Validate
-    valid_id = id_exists
-    if user_id.strip() and not valid_id:
-        st.warning("❌ Invalid Student ID. Please enter a valid ID from the list.")
+        submitted = st.form_submit_button("Continue")
+        if submitted:
+            login_message = ""
+            if not user_id.strip():
+                login_message = "Please enter your ID to continue."
+            elif not id_exists:
+                login_message = "❌ Invalid Student ID."
+            elif show_name_input and not name.strip():
+                login_message = "Please enter your name for first-time login."
+            else:
+                # Save first-time name
+                if show_name_input:
+                    save_student_info(user_id, name.strip())
 
-    if st.button("Continue", key="continue_btn"):
-        if not user_id.strip():
-            st.warning("Please enter your ID to continue.")
-        elif show_name_input and not name.strip():
-            st.warning("Please enter your name for the first-time login.")
-        elif not valid_id:
-            st.warning("Invalid ID. Cannot continue.")
-        else:
-            st.session_state.user_id = user_id.strip()
-            st.session_state.name = name.strip()
-            if st.session_state.role == "Student" and show_name_input:
-                save_student_info(st.session_state.user_id, st.session_state.name)
-            st.session_state.intro_done = True
-            st.session_state.awaiting_id = False
-            st.rerun()
+                # Store session info
+                st.session_state.user_id = user_id.strip()
+                st.session_state.name = name.strip() if show_name_input else existing_name
+                st.session_state.intro_done = True
+                st.session_state.awaiting_id = False
+
+            if login_message:
+                st.warning(login_message)
+
+    st.stop()
 
 
-    st.stop()  # stops only intro
 
 # --- Main app logic (after intro) ---
 st.divider()
