@@ -142,8 +142,7 @@ def load_data():
     "Collections",
     "Generics"
     ]
-#change to make diff
-#70% right move on
+
     df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
     df["bloom_level"] = pd.Categorical(df["bloom_level"].astype(str),
                                        categories=df["bloom_level"].dropna().unique(),
@@ -263,17 +262,60 @@ def render_sidebar(topics):
 ##############################
 
 def render_student_view(df):
-    topics = df["topic"].dropna().unique().tolist()
-    role, selected_topic = render_sidebar(topics)
+    LEVEL_ORDER = ["Beginner", "Intermediate", "Advanced"]
 
-    st.title("🎓 Java Learning – Student Mode")
-    st.subheader(f"📘 Topic: {selected_topic}")
+    # --- Load student info ---
+    if "student_level" not in st.session_state:
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            student_csv_path = os.path.join(script_dir, "..", "data", "student_list.csv")
+            
+            students_df = pd.read_csv(student_csv_path)
+            student_id = st.session_state.get("user_id", None)
+            
+            if student_id:
+                level = students_df.loc[students_df["student_id"] == int(student_id), "level"]
+                if not level.empty:
+                    st.session_state.student_level = level.iloc[0]
+                else:
+                    st.session_state.student_level = "Beginner"
+            else:
+                st.session_state.student_level = "Beginner"
+        except Exception as e:
+            st.warning(f"Could not load student info CSV: {e}")
+            st.session_state.student_level = "Beginner"
 
-    # Setup states
+    student_level = st.session_state.student_level
+
+    # --- Map level to allowed topics ---
+    level_mapping = {
+        "Beginner": 7,
+        "Intermediate": 11,
+        "Advanced": len(df['topic'].cat.categories)
+    }
+    max_idx = level_mapping.get(student_level, 7)
+    allowed_topics = df['topic'].cat.categories[:max_idx]
+
+    # --- Sidebar & topic selection ---
+    role, selected_topic = render_sidebar([t for t in df['topic'].dropna().unique() if t in allowed_topics])
+    if selected_topic is None:
+        return
+
+    st.title(f"🎓 Java Learning – Student Mode")
+    st.subheader(f"📘 Topic: {selected_topic} | Level: {student_level}")
+
+    # --- Initialize persistent states ---
     st.session_state.topic_mastery.setdefault(selected_topic, {b: 0 for b in df['bloom_level'].cat.categories})
     st.session_state.score.setdefault(selected_topic, {b: {"correct": 0, "total": 0} for b in df['bloom_level'].cat.categories})
     st.session_state.confidence_record.setdefault(selected_topic, {})
+    st.session_state.question_count = st.session_state.get("question_count", 0)
+    st.session_state.session_done = st.session_state.get("session_done", False)
+    st.session_state.current_question = st.session_state.get("current_question", None)
+    st.session_state.submitted = st.session_state.get("submitted", False)
+    st.session_state.review_mode = st.session_state.get("review_mode", False)
+    st.session_state.incorrect_review_queue = st.session_state.get("incorrect_review_queue", [])
 
+    # --- Start learning button ---
     if not st.session_state.started:
         st.info("Click 'Start Learning' to begin.")
         if st.button("🚀 Start Learning"):
@@ -281,32 +323,141 @@ def render_student_view(df):
             st.rerun()
         return
 
-    topic_df = df[df["topic"] == selected_topic]
-    if topic_df.empty:
-        st.warning("No questions for this topic.")
+    # --- Handle session completion ---
+    if st.session_state.session_done:
+        show_session_summary(selected_topic)
         return
 
-    # Question Flow
-    if st.session_state.current_question is None and not st.session_state.submitted:
-        if st.session_state.review_mode:
-            bookmarked = topic_df[topic_df["question_id"].isin(st.session_state.bookmarked)]
-            if not bookmarked.empty:
-                q = bookmarked.sample(1).iloc[0]
-                st.session_state.current_question = q.to_dict()
-                st.session_state.current_reason = "🔖 Reviewing a bookmarked question."
-            else:
-                st.success("No bookmarked questions left!")
-                st.session_state.review_mode = False
-        else:
-            q, reason = get_next_question(topic_df, selected_topic)
-            if q is not None:
-                st.session_state.current_question = q.to_dict()
-                st.session_state.current_reason = reason
-                st.session_state.asked_qs.add(q["question_id"])
+    # --- Filter questions for current topic ---
+    topic_df = df[df["topic"] == selected_topic]
+    if topic_df.empty:
+        st.warning("No questions available for this topic.")
+        return
 
-    # Show UI
+    # --- Question flow ---
+    if st.session_state.current_question is None and not st.session_state.submitted:
+        if st.session_state.review_mode and st.session_state.incorrect_review_queue:
+            # Review next incorrect question
+            next_qid = st.session_state.incorrect_review_queue.pop(0)
+            q = df[df["question_id"] == next_qid].iloc[0]
+            st.session_state.current_question = q.to_dict()
+            st.session_state.current_reason = "🔄 Reviewing an incorrect question."
+        else:
+            if st.session_state.review_mode:
+                # Review queue empty, session done
+                st.success("✅ All incorrect questions reviewed!")
+                st.session_state.review_mode = False
+                st.session_state.session_done = True
+                st.rerun()
+            else:
+                q, reason = get_next_question(topic_df, selected_topic)
+                if q is not None:
+                    st.session_state.current_question = q.to_dict()
+                    st.session_state.current_reason = reason
+                    st.session_state.asked_qs.add(q["question_id"])
+
+    # --- Display current question ---
     if st.session_state.current_question:
         display_question(pd.Series(st.session_state.current_question), selected_topic)
+        if st.session_state.submitted:
+            st.session_state.question_count += 1
+            # End session after 10 questions (normal mode)
+            if st.session_state.question_count >= 10 and not st.session_state.review_mode:
+                st.session_state.session_done = True
+                st.rerun()
+
+
+def show_session_summary(topic):
+    # Filter session questions
+    session_log = [
+        log for log in st.session_state.log
+        if log['topic'] == topic and log['session_id'] == st.session_state.session_id
+    ]
+
+    if not session_log:
+        st.info("No questions answered this session.")
+        return
+
+    total = len(session_log)
+    correct = sum([l['is_correct'] for l in session_log])
+    accuracy = correct / total * 100
+
+    st.markdown(f"### 📊 Session Summary\n**Accuracy:** {accuracy:.1f}%\n")
+
+    # Bloom-level breakdown
+    bloom_counts = {}
+    for log in session_log:
+        b = log["bloom_level"]
+        bloom_counts.setdefault(b, {"correct": 0, "total": 0})
+        bloom_counts[b]["total"] += 1
+        bloom_counts[b]["correct"] += int(log["is_correct"])
+
+    st.markdown("**Bloom Level Breakdown:**\n")
+    for b, stats in bloom_counts.items():
+        pct = stats["correct"] / stats["total"] * 100
+        st.markdown(f"- {b}: {stats['correct']}/{stats['total']} correct ({pct:.1f}%)")
+
+    # --- Identify incorrect questions ---
+    incorrect_questions = [log['question_id'] for log in session_log if not log['is_correct']]
+
+    # Review incorrect questions button
+    if incorrect_questions and not st.session_state.get("review_mode", False):
+        if st.button("🔁 Review Incorrect Questions", key="review_incorrect"):
+            st.session_state.review_mode = True
+            st.session_state.incorrect_review_queue = incorrect_questions.copy()
+            st.session_state.current_question = None
+            st.session_state.submitted = False
+            st.session_state.question_count = 0
+            st.session_state.session_done = False
+            st.rerun()
+
+    # --- Simple promotion/demotion ---
+    stats = st.session_state.score[topic]
+    total_attempted = sum([stats[b]["total"] for b in stats])
+    total_correct = sum([stats[b]["correct"] for b in stats])
+    if total_attempted > 0:
+        pct_correct = total_correct / total_attempted
+        current_level = st.session_state.student_level
+        LEVEL_ORDER = ["Beginner", "Intermediate", "Advanced"]
+        idx = LEVEL_ORDER.index(current_level)
+        if pct_correct >= 0.7 and idx < len(LEVEL_ORDER)-1:
+            st.session_state.student_level = LEVEL_ORDER[idx+1]
+            st.info(f"🎉 Well done! You've been promoted to **{LEVEL_ORDER[idx+1]}**.")
+        elif pct_correct <= 0.5 and idx > 0:
+            st.session_state.student_level = LEVEL_ORDER[idx-1]
+            st.info(f"🙂 Let's reinforce your skills. You've been adjusted to **{LEVEL_ORDER[idx-1]}**.")
+
+        # Update CSV
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            student_csv_path = os.path.join(script_dir, "..", "data", "student_list.csv")
+            students_df = pd.read_csv(student_csv_path)
+            student_id = st.session_state.get("user_id")
+            if student_id:
+                students_df.loc[students_df["student_id"] == int(student_id), "level"] = st.session_state.student_level
+                students_df.to_csv(student_csv_path, index=False)
+        except Exception as e:
+            st.warning(f"Could not update student CSV: {e}")
+
+    # Start new session button
+    if st.button("🔁 Start New Session", key="start_new_session"):
+        reset_session_for_topic(topic)
+        st.rerun()
+
+
+
+
+
+def reset_session_for_topic(selected_topic):
+    """Resets session-related states without affecting login or global data."""
+    st.session_state.started = False
+    st.session_state.current_question = None
+    st.session_state.submitted = False
+    st.session_state.review_mode = False
+    st.session_state.question_count = 0
+    st.session_state.session_done = False
+    st.session_state.asked_qs = set()
+
 
 def display_question(q, topic):
     st.info(st.session_state.current_reason)
