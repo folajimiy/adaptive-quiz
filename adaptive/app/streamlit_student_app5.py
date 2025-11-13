@@ -175,44 +175,81 @@ st.markdown(
 
 # --- Adaptive BBPS Logic ---
 def get_next_question(topic_df, selected_topic):
-    bloom_levels = topic_df['bloom_level'].cat.categories
+    """Selects the next question using controlled Bloom progression/demotion."""
+    bloom_levels = list(topic_df['bloom_level'].cat.categories)
     mastery = st.session_state.topic_mastery[selected_topic]
     confidence_log = st.session_state.confidence_record[selected_topic]
+    current_bloom = st.session_state.current_bloom
 
-    # 1. Remediation
+    # --- 1. Remediation takes priority ---
     if st.session_state.remediation_queue:
         target = st.session_state.remediation_queue.pop(0)
         qs = topic_df[(topic_df["sub_concept"] == target) &
                       (~topic_df["question_id"].isin(st.session_state.asked_qs))]
         if not qs.empty:
-            return qs.sample(1).iloc[0], f"🎯 Targeting weak area: {target}"
+            chosen = qs.sample(1).iloc[0]
+            st.session_state.current_bloom = chosen["bloom_level"]
+            return chosen, f"🎯 Targeting weak area: {target}"
 
-    # 2. Bidirectional Bloom Logic
-    for i, level in enumerate(bloom_levels):
-        level_qs = topic_df[(topic_df["bloom_level"] == level) &
-                            (~topic_df["question_id"].isin(st.session_state.asked_qs))]
-        if level_qs.empty:
-            continue
+    # --- 2. Freeze starting Bloom if any frozen questions remain ---
+    if st.session_state.get("freeze_bloom_count", 0) > 0:
+        freeze_qs = topic_df[(topic_df["bloom_level"] == current_bloom) &
+                              (~topic_df["question_id"].isin(st.session_state.asked_qs))]
+        if not freeze_qs.empty:
+            q = freeze_qs.sample(1).iloc[0]
+            st.session_state.freeze_bloom_count -= 1
+            return q, f"🎯 Frozen question at {current_bloom}"
+        # fallback if no frozen questions available
+        st.session_state.freeze_bloom_count = 0
 
-        records = confidence_log.get(level, [])
-        high_conf_wrong = [r for r in records if not r['correct'] and r['confidence'] >= 4]
-        low_conf_right = [r for r in records if r['correct'] and r['confidence'] <= 2]
+    # --- 3. Adaptive logic: one-level progression/demotion ---
+    current_idx = bloom_levels.index(current_bloom)
 
-        if high_conf_wrong and i > 0:
-            lower = bloom_levels[i - 1]
-            demotion_qs = topic_df[(topic_df["bloom_level"] == lower) &
-                                   (~topic_df["question_id"].isin(st.session_state.asked_qs))]
-            if not demotion_qs.empty:
-                return demotion_qs.sample(1).iloc[0], f"🔻 Demoting to reinforce: {lower}"
+    # Look at recent confidence log for current Bloom
+    records = confidence_log.get(current_bloom, [])
+    recent = records[-3:] if records else []
 
-        if low_conf_right:
-            reinforce_qs = level_qs
-            return reinforce_qs.sample(1).iloc[0], f"🔄 Reinforcing: {level} due to low confidence"
+    # --- Check if demotion needed ---
+    high_conf_wrong = [r for r in recent if not r['correct'] and r['confidence'] >= 4]
+    if high_conf_wrong and current_idx > 0:
+        lower_level = bloom_levels[current_idx - 1]
+        demotion_qs = topic_df[(topic_df["bloom_level"] == lower_level) &
+                               (~topic_df["question_id"].isin(st.session_state.asked_qs))]
+        if not demotion_qs.empty:
+            chosen = demotion_qs.sample(1).iloc[0]
+            st.session_state.current_bloom = lower_level
+            return chosen, f"🔻 Demoting to {lower_level} due to recent mistakes"
 
-        if mastery.get(level, 0) < 2:
-            return level_qs.sample(1).iloc[0], f"⬆️ Progressing to: {level}"
+    # --- Check if promotion possible ---
+    low_conf_right = [r for r in recent if r['correct'] and r['confidence'] <= 2]
+    if not high_conf_wrong and len(recent) >= 2 and current_idx < len(bloom_levels)-1:
+        # if mostly high confidence correct, move up one level
+        if all(r['correct'] and r['confidence'] >= 3 for r in recent):
+            higher_level = bloom_levels[current_idx + 1]
+            level_qs = topic_df[(topic_df["bloom_level"] == higher_level) &
+                                (~topic_df["question_id"].isin(st.session_state.asked_qs))]
+            if not level_qs.empty:
+                chosen = level_qs.sample(1).iloc[0]
+                st.session_state.current_bloom = higher_level
+                return chosen, f"⬆️ Progressing to {higher_level}"
 
-    return None, "🎉 You've completed this topic!"
+    # --- 4. Stay at current Bloom if nothing else ---
+    level_qs = topic_df[(topic_df["bloom_level"] == current_bloom) &
+                        (~topic_df["question_id"].isin(st.session_state.asked_qs))]
+    if not level_qs.empty:
+        chosen = level_qs.sample(1).iloc[0]
+        return chosen, f"➡️ Continuing at {current_bloom}"
+
+    # --- 5. Fallback: pick any remaining question ---
+    remaining_qs = topic_df[~topic_df["question_id"].isin(st.session_state.asked_qs)]
+    if not remaining_qs.empty:
+        chosen = remaining_qs.sample(1).iloc[0]
+        st.session_state.current_bloom = chosen["bloom_level"]
+        return chosen, f"🎯 Picking remaining question at {chosen['bloom_level']}"
+
+    return None, "🎉 All questions completed!"
+
+
 
 # --- UI ---
 def render_sidebar(topics):
@@ -287,6 +324,17 @@ def render_student_view(df):
 
     student_level = st.session_state.student_level
 
+    # --- Initialize current Bloom level in session state (starting point only) ---
+    starting_bloom = {
+        "Beginner": "Remember",
+        "Intermediate": "Apply",
+        "Advanced": "Evaluate"
+    }
+    if "current_bloom" not in st.session_state:
+        st.session_state.current_bloom = starting_bloom.get(student_level, "Remember")
+        # Freeze Bloom for first 2 questions (adjustable)
+        st.session_state.freeze_bloom_count = 0
+
     # --- Map level to allowed topics ---
     level_mapping = {
         "Beginner": 7,
@@ -314,9 +362,10 @@ def render_student_view(df):
     st.session_state.submitted = st.session_state.get("submitted", False)
     st.session_state.review_mode = st.session_state.get("review_mode", False)
     st.session_state.incorrect_review_queue = st.session_state.get("incorrect_review_queue", [])
+    st.session_state.asked_qs = st.session_state.get("asked_qs", set())
 
     # --- Start learning button ---
-    if not st.session_state.started:
+    if not st.session_state.get("started", False):
         st.info("Click 'Start Learning' to begin.")
         if st.button("🚀 Start Learning"):
             st.session_state.started = True
@@ -337,24 +386,41 @@ def render_student_view(df):
     # --- Question flow ---
     if st.session_state.current_question is None and not st.session_state.submitted:
         if st.session_state.review_mode and st.session_state.incorrect_review_queue:
-            # Review next incorrect question
             next_qid = st.session_state.incorrect_review_queue.pop(0)
             q = df[df["question_id"] == next_qid].iloc[0]
             st.session_state.current_question = q.to_dict()
             st.session_state.current_reason = "🔄 Reviewing an incorrect question."
+            st.session_state.current_bloom = q["bloom_level"]
         else:
             if st.session_state.review_mode:
-                # Review queue empty, session done
                 st.success("✅ All incorrect questions reviewed!")
                 st.session_state.review_mode = False
                 st.session_state.session_done = True
                 st.rerun()
             else:
-                q, reason = get_next_question(topic_df, selected_topic)
+                # --- Use freeze Bloom logic if any remaining ---
+                if st.session_state.freeze_bloom_count > 0:
+                    freeze_qs = topic_df[
+                        (topic_df["bloom_level"] == st.session_state.current_bloom) &
+                        (~topic_df["question_id"].isin(st.session_state.asked_qs))
+                    ]
+                    if not freeze_qs.empty:
+                        q = freeze_qs.sample(1).iloc[0]
+                        reason = f"🎯 Starting at {st.session_state.current_bloom} level for {student_level} learner."
+                        st.session_state.freeze_bloom_count -= 1
+                    else:
+                        # fallback to adaptive logic if no questions available at starting Bloom
+                        q, reason = get_next_question(topic_df, selected_topic)
+                else:
+                    q, reason = get_next_question(topic_df, selected_topic)
+
                 if q is not None:
                     st.session_state.current_question = q.to_dict()
                     st.session_state.current_reason = reason
                     st.session_state.asked_qs.add(q["question_id"])
+                    st.session_state.current_bloom = q["bloom_level"]
+  # update Bloom for subsequent questions
+
 
     # --- Display current question ---
     if st.session_state.current_question:
@@ -367,11 +433,14 @@ def render_student_view(df):
                 st.rerun()
 
 
+
 def show_session_summary(topic):
-    # Filter session questions
+    """Displays session summary and handles promotion/demotion once per session."""
+
+    # Filter session questions for current session
     session_log = [
         log for log in st.session_state.log
-        if log['topic'] == topic and log['session_id'] == st.session_state.session_id
+        if log['session_id'] == st.session_state.session_id
     ]
 
     if not session_log:
@@ -397,7 +466,7 @@ def show_session_summary(topic):
         pct = stats["correct"] / stats["total"] * 100
         st.markdown(f"- {b}: {stats['correct']}/{stats['total']} correct ({pct:.1f}%)")
 
-    # --- Identify incorrect questions ---
+    # Identify incorrect questions
     incorrect_questions = [log['question_id'] for log in session_log if not log['is_correct']]
 
     # Review incorrect questions button
@@ -411,23 +480,24 @@ def show_session_summary(topic):
             st.session_state.session_done = False
             st.rerun()
 
-    # --- Simple promotion/demotion ---
-    stats = st.session_state.score[topic]
-    total_attempted = sum([stats[b]["total"] for b in stats])
-    total_correct = sum([stats[b]["correct"] for b in stats])
-    if total_attempted > 0:
-        pct_correct = total_correct / total_attempted
-        current_level = st.session_state.student_level
+    # --- Student-level promotion/demotion (run once per session) ---
+    if not st.session_state.get("session_summary_done", False):
         LEVEL_ORDER = ["Beginner", "Intermediate", "Advanced"]
+        current_level = st.session_state.student_level
         idx = LEVEL_ORDER.index(current_level)
-        if pct_correct >= 0.7 and idx < len(LEVEL_ORDER)-1:
-            st.session_state.student_level = LEVEL_ORDER[idx+1]
-            st.info(f"🎉 Well done! You've been promoted to **{LEVEL_ORDER[idx+1]}**.")
-        elif pct_correct <= 0.5 and idx > 0:
-            st.session_state.student_level = LEVEL_ORDER[idx-1]
-            st.info(f"🙂 Let's reinforce your skills. You've been adjusted to **{LEVEL_ORDER[idx-1]}**.")
 
-        # Update CSV
+        if accuracy >= 70 and idx < len(LEVEL_ORDER) - 1:
+            st.session_state.student_level = LEVEL_ORDER[idx + 1]
+            st.info(f"🎉 Well done! You've been promoted to **{LEVEL_ORDER[idx + 1]}**.")
+        elif accuracy <= 50 and idx > 0:
+            st.session_state.student_level = LEVEL_ORDER[idx - 1]
+            st.info(f"🙂 Let's reinforce your skills. You've been adjusted to **{LEVEL_ORDER[idx - 1]}**.")
+
+        # --- Update current Bloom level in session and CSV ---
+        # Use the last question's bloom level as the new current Bloom
+        last_bloom = session_log[-1]["bloom_level"]
+        st.session_state.current_bloom = last_bloom
+
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             student_csv_path = os.path.join(script_dir, "..", "data", "student_list.csv")
@@ -435,9 +505,12 @@ def show_session_summary(topic):
             student_id = st.session_state.get("user_id")
             if student_id:
                 students_df.loc[students_df["student_id"] == int(student_id), "level"] = st.session_state.student_level
+                students_df.loc[students_df["student_id"] == int(student_id), "current_bloom"] = st.session_state.current_bloom
                 students_df.to_csv(student_csv_path, index=False)
         except Exception as e:
             st.warning(f"Could not update student CSV: {e}")
+
+        st.session_state.session_summary_done = True  # prevents double promotion/demotion
 
     # Start new session button
     if st.button("🔁 Start New Session", key="start_new_session"):
@@ -446,10 +519,8 @@ def show_session_summary(topic):
 
 
 
-
-
 def reset_session_for_topic(selected_topic):
-    """Resets session-related states without affecting login or global data."""
+    """Resets session states for a new session without affecting global login info."""
     st.session_state.started = False
     st.session_state.current_question = None
     st.session_state.submitted = False
@@ -457,6 +528,17 @@ def reset_session_for_topic(selected_topic):
     st.session_state.question_count = 0
     st.session_state.session_done = False
     st.session_state.asked_qs = set()
+    
+    # Mark that session summary is not yet applied
+    st.session_state.session_summary_done = False
+    
+    # Remove old session log for this session to prevent double promotion/demotion
+    current_session = st.session_state.session_id
+    st.session_state.log = [log for log in st.session_state.log if log['session_id'] != current_session]
+    
+    # Increment session ID for a fresh session
+    st.session_state.session_id = str(int(time.time()))
+
 
 
 def display_question(q, topic):

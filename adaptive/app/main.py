@@ -25,20 +25,36 @@ else:
     st.error(f"Student list not found at {CSV_PATH}.")
     st.stop()
 
-# --- Function to save/update student info ---
+# Map experience level → starting Bloom level
+STARTING_BLOOM = {
+    "Beginner": "Remember",
+    "Intermediate": "Apply",
+    "Advanced": "Evaluate"
+}
+
 def save_student_info(student_id, name, level=None):
     df_students = pd.read_csv(CSV_PATH, dtype=str)
     if (df_students["student_id"] == student_id).any():
+        # Update name if provided
         if name.strip():
             df_students.loc[df_students["student_id"] == student_id, "name"] = name.strip()
+        # Update level and initialize current_bloom if provided
         if level:
             df_students.loc[df_students["student_id"] == student_id, "level"] = level
+            df_students.loc[df_students["student_id"] == student_id, "current_bloom"] = STARTING_BLOOM.get(level, "Remember")
     else:
-        data = {"student_id": [student_id], "name": [name.strip()]}
-        if level:
-            data["level"] = [level]
+        # New student
+        data = {
+            "student_id": [student_id],
+            "name": [name.strip()],
+            "level": [level if level else "Beginner"],
+            "current_bloom": [STARTING_BLOOM.get(level, "Remember")]
+        }
         df_students = pd.concat([df_students, pd.DataFrame(data)], ignore_index=True)
+
     df_students.to_csv(CSV_PATH, index=False)
+
+
 
 # --- Intro screen ---
 if not st.session_state.intro_done:
