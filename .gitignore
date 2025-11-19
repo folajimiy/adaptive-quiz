@@ -1,0 +1,140 @@
+# ============================================
+#  Python .gitignore (clean, production-ready)
+# ============================================
+
+# -- Byte-compiled / optimized / DLL files --
+__pycache__/
+*.py[cod]
+*$py.class
+
+# -- C extensions --
+*.so
+
+# -- Distribution / packaging --
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# -- Virtual environments --
+# (comment out if you want to commit a venv)
+venv/
+env/
+ENV/
+.venv/
+.virtualenv/
+pipenv/
+.poetry/
+
+# -- PyInstaller --
+# Usually includes files with build info
+*.manifest
+*.spec
+
+# -- Installer logs --
+pip-log.txt
+pip-delete-this-directory.txt
+
+# -- Unit test / coverage reports --
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+pytest_cache/
+
+# -- Jupyter Notebook checkpoints --
+.ipynb_checkpoints/
+
+# -- pyenv --
+.python-version
+
+# -- pipenv --
+# (Pipfile.lock should be committed)
+.pipenv
+
+# -- poetry --
+# (poetry.lock should be committed)
+.poetry.toml
+
+# -- Pydantic / settings --
+.env
+.env.*
+*.env
+*.ini
+*.cfg
+*.local
+secrets.json
+
+# -- PyCharm / VS Code --
+# PyCharm
+.idea/
+# VS Code
+.vscode/
+
+# -- MyPy --
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# -- Pyre type checker --
+.pyre/
+
+# -- Ruff / Black / other tools --
+.cache/
+ruff_cache/
+
+# -- Django --
+*.log
+local_settings.py
+db.sqlite3
+media/
+
+# -- Flask --
+instance/
+.webassets-cache
+
+# -- Scrapy --
+.scrapy
+
+# -- Sphinx documentation --
+docs/_build/
+doc/_build/
+
+# -- Celery --
+celerybeat-schedule
+celerybeat.pid
+
+# -- SQLAlchemy --
+*.db
+*.sqlite3
+
+# -- Logs --
+*.log
+
+# -- MacOS --
+.DS_Store
+
+# -- Windows --
+Thumbs.db
