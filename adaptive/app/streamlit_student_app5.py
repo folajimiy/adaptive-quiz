@@ -306,21 +306,30 @@ def render_student_view(df):
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             student_csv_path = os.path.join(script_dir, "..", "data", "student_list.csv")
-            
-            students_df = pd.read_csv(student_csv_path)
+
+            # Load as strings ALWAYS
+            students_df = pd.read_csv(student_csv_path, dtype=str)
+
             student_id = st.session_state.get("user_id", None)
-            
+
             if student_id:
-                level = students_df.loc[students_df["student_id"] == int(student_id), "level"]
-                if not level.empty:
-                    st.session_state.student_level = level.iloc[0]
+                # Compare as strings, never int()
+                level_series = students_df.loc[
+                    students_df["student_id"] == str(student_id),
+                    "level"
+                ]
+
+                if not level_series.empty:
+                    st.session_state.student_level = level_series.iloc[0]
                 else:
                     st.session_state.student_level = "Beginner"
             else:
                 st.session_state.student_level = "Beginner"
+
         except Exception as e:
             st.warning(f"Could not load student info CSV: {e}")
             st.session_state.student_level = "Beginner"
+
 
     student_level = st.session_state.student_level
 
@@ -498,17 +507,27 @@ def show_session_summary(topic):
         last_bloom = session_log[-1]["bloom_level"]
         st.session_state.current_bloom = last_bloom
 
-        try:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            student_csv_path = os.path.join(script_dir, "..", "data", "student_list.csv")
-            students_df = pd.read_csv(student_csv_path)
-            student_id = st.session_state.get("user_id")
-            if student_id:
-                students_df.loc[students_df["student_id"] == int(student_id), "level"] = st.session_state.student_level
-                students_df.loc[students_df["student_id"] == int(student_id), "current_bloom"] = st.session_state.current_bloom
-                students_df.to_csv(student_csv_path, index=False)
-        except Exception as e:
-            st.warning(f"Could not update student CSV: {e}")
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        student_csv_path = os.path.join(script_dir, "..", "data", "student_list.csv")
+
+        # ALWAYS read IDs as strings
+        students_df = pd.read_csv(student_csv_path, dtype=str)
+
+        student_id = st.session_state.get("user_id")
+
+        if student_id:
+            # MATCH AS STRING ONLY — NO int()
+            mask = students_df["student_id"] == str(student_id)
+
+            students_df.loc[mask, "level"] = st.session_state.student_level
+            students_df.loc[mask, "current_bloom"] = st.session_state.current_bloom
+
+            students_df.to_csv(student_csv_path, index=False)
+
+    except Exception as e:
+        st.warning(f"Could not update student CSV: {e}")
+
 
         st.session_state.session_summary_done = True  # prevents double promotion/demotion
 
