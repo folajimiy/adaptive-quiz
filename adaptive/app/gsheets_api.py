@@ -15,6 +15,7 @@ def _get_service():
     return build("sheets", "v4", credentials=creds)
 
 
+
 def append_row_to_sheet(sheet_id: str, user_id: str, row_data: dict):
     """
     Append a single log row to a Google Sheet.

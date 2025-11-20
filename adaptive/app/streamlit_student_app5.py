@@ -1477,6 +1477,7 @@ def run_student_mode():
 #                 st.session_state.score[selected_topic][q["bloom_level"]]["correct"] += 1
                 
 
+
 #             st.session_state.log.append({
 #                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
 #                 "topic": q["topic"],
