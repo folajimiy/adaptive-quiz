@@ -91,10 +91,9 @@ st.set_page_config("Adaptive Java Learning", layout="wide")
 # --- Data Loading ---
 @st.cache_data
 def load_data():
-    # Get path relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # data_path = os.path.join(script_dir, "..", "data", "java_question_bank_with_topics_cleaned_gpt.csv")
-    data_path = os.path.join(script_dir, "..", "data", "comp_1050.csv")
+    data_path = os.path.join(script_dir, "..", "data", "comp_1050_fixed.csv")
+    # or overwrite comp_1050.csv in that folder and keep the old name
 
     if not os.path.exists(data_path):
         st.error(f"Error: Data file not found at {data_path}")
@@ -107,7 +106,6 @@ def load_data():
         return pd.DataFrame()
 
     topic_order = [
-        # level 1 beginner
         "Basic Syntax",
         "Control Structures",
         "Loops",
@@ -115,12 +113,10 @@ def load_data():
         "Strings",
         "Methods and Parameter Passing",
         "File I/O and Exception Handling",
-        # level 2 intermediate
         "Classes and Objects",
         "Encapsulation and Access Modifiers",
         "Inheritance and Polymorphism",
         "Abstract Classes and Interfaces",
-        # level 3 advanced
         "Collections",
         "Generics"
     ]
@@ -133,6 +129,53 @@ def load_data():
     )
 
     return df.sort_values(["topic", "bloom_level"])
+
+
+
+
+# def load_data():
+#     # Get path relative to this script
+#     script_dir = os.path.dirname(os.path.abspath(__file__))
+#     # data_path = os.path.join(script_dir, "..", "data", "java_question_bank_with_topics_cleaned_gpt.csv")
+#     data_path = os.path.join(script_dir, "..", "data", "comp_1050.csv")
+
+#     if not os.path.exists(data_path):
+#         st.error(f"Error: Data file not found at {data_path}")
+#         return pd.DataFrame()
+
+#     try:
+#         df = pd.read_csv(data_path, encoding="latin1")
+#     except Exception as e:
+#         st.error(f"Error reading CSV: {e}")
+#         return pd.DataFrame()
+
+#     topic_order = [
+#         # level 1 beginner
+#         "Basic Syntax",
+#         "Control Structures",
+#         "Loops",
+#         "Arrays",
+#         "Strings",
+#         "Methods and Parameter Passing",
+#         "File I/O and Exception Handling",
+#         # level 2 intermediate
+#         "Classes and Objects",
+#         "Encapsulation and Access Modifiers",
+#         "Inheritance and Polymorphism",
+#         "Abstract Classes and Interfaces",
+#         # level 3 advanced
+#         "Collections",
+#         "Generics"
+#     ]
+
+#     df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
+#     df["bloom_level"] = pd.Categorical(
+#         df["bloom_level"].astype(str),
+#         categories=df["bloom_level"].dropna().unique(),
+#         ordered=True
+#     )
+
+#     return df.sort_values(["topic", "bloom_level"])
 
 
 
