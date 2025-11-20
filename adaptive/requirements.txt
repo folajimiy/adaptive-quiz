@@ -1,6 +1,7 @@
 streamlit
 pandas
 plotly
+numpy
 matplotlib>=3.9
 google-api-python-client
 google-auth
