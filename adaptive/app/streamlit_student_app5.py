@@ -91,9 +91,9 @@ st.set_page_config("Adaptive Java Learning", layout="wide")
 # --- Data Loading ---
 @st.cache_data
 def load_data():
+    # Get path relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_path = os.path.join(script_dir, "..", "data", "comp_1050_fixed.csv")
-    # or overwrite comp_1050.csv in that folder and keep the old name
 
     if not os.path.exists(data_path):
         st.error(f"Error: Data file not found at {data_path}")
@@ -105,6 +105,7 @@ def load_data():
         st.error(f"Error reading CSV: {e}")
         return pd.DataFrame()
 
+    # 🔥 FIX: topic_order MUST be defined BEFORE using it
     topic_order = [
         "Basic Syntax",
         "Control Structures",
@@ -121,14 +122,16 @@ def load_data():
         "Generics"
     ]
 
+    # Mark topics as ordered categorical
     df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
-    df["bloom_level"] = pd.Categorical(
-        df["bloom_level"].astype(str),
-        categories=df["bloom_level"].dropna().unique(),
-        ordered=True
-    )
 
+    # Bloom level handling
+    if "bloom_level" in df.columns:
+        df["bloom_level"] = pd.Categorical(df["bloom_level"].astype(str))
+
+    # Return sorted dataset
     return df.sort_values(["topic", "bloom_level"])
+
 
 
 
