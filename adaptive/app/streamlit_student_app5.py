@@ -574,15 +574,19 @@ def display_question(q, topic):
     # confidence = st.slider("Confidence?", 1, 5, 3, key=f"conf_{q['question_id']}",
     #                        format_func=lambda x: ["Guessing", "Unsure", "Okay", "Confident", "Very Confident"][x-1])
 
-    confidence = st.slider("How confident are you?", 1, 5, 3, key=f"conf_{q['question_id']}")
-    confidence_labels = {
-        1: "😬 Guessing",
-        2: "🤔 Unsure",
-        3: "😐 Okay",
-        4: "🙂 Confident",
-        5: "😎 Very Confident"
-    }
-    st.markdown(f"**Selected Confidence:** {confidence_labels[confidence]}")
+
+    confidence = st.radio("How confident are you?:", ["😬 Guessing", "🤔 Unsure", "😐 Okay", "🙂 Confident", "😎 Very Confident"], index=None)
+
+
+    # confidence = st.slider("How confident are you?", 1, 5, 3, key=f"conf_{q['question_id']}")
+    # confidence_labels = {
+    #     1: "😬 Guessing",
+    #     2: "🤔 Unsure",
+    #     3: "😐 Okay",
+    #     4: "🙂 Confident",
+    #     5: "😎 Very Confident"
+    # }
+    # st.markdown(f"**Selected Confidence:** {confidence_labels[confidence]}")
 
     submit_col, bookmark_col = st.columns(2)
     if bookmark_col.button("🔖 Bookmark", use_container_width=True):
@@ -592,6 +596,10 @@ def display_question(q, topic):
     if submit_col.button("✅ Submit", use_container_width=True) and not st.session_state.submitted:
         if choice is None:
             st.warning("Choose an option.")
+        
+        elif confidence is None:
+            st.warning("Choose your confidence level.")
+
         else:
             handle_submission(q, choice, confidence, topic)
             st.session_state.submitted = True
