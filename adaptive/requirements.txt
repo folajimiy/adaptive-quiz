@@ -1,7 +1,7 @@
 streamlit
 pandas
 plotly
-matplotlib
+matplotlib>=3.9
 google-api-python-client
 google-auth
 google-auth-oauthlib
