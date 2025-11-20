@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from streamlit_student_app5 import run_student_mode
-from teacher import run_teacher_mode
+# from teacher import run_teacher_mode
 
 # --- Page setup ---
 st.set_page_config(page_title="Adaptive Java Tutor", layout="wide")
@@ -69,7 +69,7 @@ if not st.session_state.intro_done:
         st.write("• Upload question banks\n• Monitor student mastery\n• Export results")
         if st.button("🛠️ Start as Teacher", key="teacher_btn"):
             st.session_state.role = "Teacher"
-            st.session_state.awaiting_id = True
+            # st.session_state.awaiting_id = True
 
     # --- ID input ---
 if st.session_state.awaiting_id:
@@ -124,6 +124,6 @@ if st.session_state.role == "Student":
     run_student_mode()
 elif st.session_state.role == "Teacher":
     st.info("👩‍🏫 Teacher mode not implemented yet.")
-    run_teacher_mode()
+    # run_teacher_mode()
 else:
     st.warning("Please select a role to continue.")

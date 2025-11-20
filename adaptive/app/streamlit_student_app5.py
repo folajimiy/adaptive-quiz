@@ -4,6 +4,12 @@ import os
 import time
 import matplotlib
 
+from gsheets_api import append_row_to_sheet, get_valid_user_ids
+
+# Replace this with your actual spreadsheet ID (from the URL)
+GOOGLE_SHEET_ID = "1Eg1NCEeuXMtjEVc9SaMZ_xKE5AIswi_T6OQ6KA39__Q"
+
+
 
 # --- Session State ---
 def initialize_session_state():
@@ -83,29 +89,12 @@ def calculate_learning_gains(df_logs):
 st.set_page_config("Adaptive Java Learning", layout="wide")
 
 # --- Data Loading ---
-# @st.cache_data
-# def load_data():
-#     try:
-#         df = pd.read_csv("data/java_question_bank_with_topics_cleaned_gpt.csv", encoding="latin1")
-#     except FileNotFoundError:
-#         st.error("Error: Data file not found.")
-#         return pd.DataFrame()
-
-#     topic_order = [
-#         "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
-#         "Loops", "Methods", "Arrays", "Object-Oriented Programming",
-#         "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
-#         "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
-#     ]
-#     df['topic'] = pd.Categorical(df['topic'], categories=topic_order, ordered=True)
-#     df['bloom_level'] = pd.Categorical(df['bloom_level'], categories=df['bloom_level'].unique(), ordered=True)
-#     return df.sort_values(['topic', 'bloom_level'])
-# --- Data Loading ---
 @st.cache_data
 def load_data():
     # Get path relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(script_dir, "..", "data", "java_question_bank_with_topics_cleaned_gpt.csv")
+    # data_path = os.path.join(script_dir, "..", "data", "java_question_bank_with_topics_cleaned_gpt.csv")
+    data_path = os.path.join(script_dir, "..", "data", "comp_1050.csv")
 
     if not os.path.exists(data_path):
         st.error(f"Error: Data file not found at {data_path}")
@@ -117,36 +106,31 @@ def load_data():
         st.error(f"Error reading CSV: {e}")
         return pd.DataFrame()
 
-    # topic_order = [
-    #     "Basic Syntax", "Data Types", "Variables", "Operators", "Control Flow",
-    #     "Loops", "Methods", "Arrays", "Object-Oriented Programming",
-    #     "Inheritance", "Polymorphism", "Abstraction", "Encapsulation",
-    #     "Exception Handling", "File I/O", "Multithreading", "Collections", "Generics"
-    # ]
-    
     topic_order = [
-    #level 1 beginner
-    "Basic Syntax",
-    "Control Structures",
-    "Loops",
-    "Arrays",
-    "Strings",
-    "Methods and Parameter Passing",
-    "File I/O and Exception Handling",
-    #level 2 intermediate
-    "Classes and Objects",
-    "Encapsulation and Access Modifiers",
-    "Inheritance and Polymorphism",
-    "Abstract Classes and Interfaces",
-    #level 3 advanced
-    "Collections",
-    "Generics"
+        # level 1 beginner
+        "Basic Syntax",
+        "Control Structures",
+        "Loops",
+        "Arrays",
+        "Strings",
+        "Methods and Parameter Passing",
+        "File I/O and Exception Handling",
+        # level 2 intermediate
+        "Classes and Objects",
+        "Encapsulation and Access Modifiers",
+        "Inheritance and Polymorphism",
+        "Abstract Classes and Interfaces",
+        # level 3 advanced
+        "Collections",
+        "Generics"
     ]
 
     df["topic"] = pd.Categorical(df["topic"], categories=topic_order, ordered=True)
-    df["bloom_level"] = pd.Categorical(df["bloom_level"].astype(str),
-                                       categories=df["bloom_level"].dropna().unique(),
-                                       ordered=True)
+    df["bloom_level"] = pd.Categorical(
+        df["bloom_level"].astype(str),
+        categories=df["bloom_level"].dropna().unique(),
+        ordered=True
+    )
 
     return df.sort_values(["topic", "bloom_level"])
 
@@ -217,7 +201,7 @@ def get_next_question(topic_df, selected_topic):
 # --- UI ---
 def render_sidebar(topics):
     st.sidebar.title("📚 Adaptive Java Practice")
-    role = st.sidebar.radio("Select Role", ["Student", "Teacher"])
+    role = st.sidebar.radio("Select Role", ["Student"])
     selected_topic = st.sidebar.selectbox("📘 Choose a Topic", topics)
 
     if st.sidebar.button("🔄 Reset Session"):
@@ -250,6 +234,26 @@ def render_student_view(df):
     topics = df["topic"].dropna().unique().tolist()
     role, selected_topic = render_sidebar(topics)
 
+    # --- Step 1: Load valid student IDs from Google Sheets ---
+    valid_ids = get_valid_user_ids(GOOGLE_SHEET_ID)
+
+    # --- Step 2: Ask user to enter student ID ---
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = ""
+
+    st.session_state.user_id = st.text_input(
+        "Enter your student ID:",
+        value=st.session_state.user_id
+    )
+
+    # --- Step 3: Validate ---
+    if st.session_state.user_id not in valid_ids:
+        st.warning("Please enter a valid student ID to continue.")
+        st.stop()
+    else:
+        st.success(f"Welcome, **{st.session_state.user_id}**!")
+
+
     st.title("🎓 Java Learning – Student Mode")
     st.subheader(f"📘 Topic: {selected_topic}")
 
@@ -269,6 +273,8 @@ def render_student_view(df):
     if topic_df.empty:
         st.warning("No questions for this topic.")
         return
+    
+    
 
     # Question Flow
     if st.session_state.current_question is None and not st.session_state.submitted:
@@ -291,6 +297,8 @@ def render_student_view(df):
     # Show UI
     if st.session_state.current_question:
         display_question(pd.Series(st.session_state.current_question), selected_topic)
+
+    
 
 def display_question(q, topic):
     st.info(st.session_state.current_reason)
@@ -437,31 +445,17 @@ def handle_submission(q, choice, confidence, topic):
     # Add this entry to in-memory log list
     st.session_state.log.append(log_entry)
 
-    # === Absolute path: go back one directory from current file ===
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(base_dir, ".."))  # one level up
-    data_dir = os.path.join(project_root, "logs")
-    os.makedirs(data_dir, exist_ok=True)
+    # --- Log to Google Sheets: one sheet/tab per student ---
+    try:
+        append_row_to_sheet(
+            sheet_id=GOOGLE_SHEET_ID,
+            user_id=student_id,    # sheet/tab name = student_id
+            row_data=log_entry
+        )
+    except Exception as e:
+        # Fail gracefully but don't break the student's flow
+        st.warning(f"Could not log to Google Sheets: {e}")
 
-    # === Unified file per student ===
-    student_csv = os.path.join(data_dir, f"student_{student_id}.csv")
-
-    # Convert log to DataFrame and save (append mode)
-    log_df = pd.DataFrame(st.session_state.log)
-
-    if os.path.exists(student_csv):
-        existing = pd.read_csv(student_csv)
-        combined = pd.concat([existing, log_df], ignore_index=True)
-        combined.to_csv(student_csv, index=False)
-    else:
-        log_df.to_csv(student_csv, index=False)
-
-    # Save logs to CSV
-    # log_df = pd.DataFrame(st.session_state.log)
-    # os.makedirs("logs", exist_ok=True)
-    # log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
-    # check_for_bloom_badge(topic, bloom)
-    
 
 
 def display_topic_completion_summary(selected_topic):
