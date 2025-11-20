@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import time
-import matplotlib
+# import matplotlib
 
 from gsheets_api import append_row_to_sheet, get_valid_user_ids
 
@@ -555,7 +555,7 @@ def main():
 
 
 import glob
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 def render_teacher_view():
     st.title("👩‍🏫 Teacher Dashboard")
