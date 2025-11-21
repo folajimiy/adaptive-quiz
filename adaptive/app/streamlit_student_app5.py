@@ -292,7 +292,7 @@ def render_sidebar(topics):
         render_teacher_view()
         st.stop()
 
-    return role, selected_topic
+    return selected_topic
 
 
 ##############################
