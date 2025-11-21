@@ -102,6 +102,8 @@ st.set_page_config("Adaptive Java Learning", layout="wide")
 #     df['bloom_level'] = pd.Categorical(df['bloom_level'], categories=df['bloom_level'].unique(), ordered=True)
 #     return df.sort_values(['topic', 'bloom_level'])
 # --- Data Loading ---
+
+
 @st.cache_data
 def load_data():
     # Get path relative to this script
@@ -292,7 +294,7 @@ def render_sidebar(topics):
         render_teacher_view()
         st.stop()
 
-    return selected_topic
+    return role, selected_topic
 
 
 ##############################
