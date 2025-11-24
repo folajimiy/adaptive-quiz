@@ -294,7 +294,7 @@ def render_sidebar(topics):
         render_teacher_view()
         st.stop()
 
-    return role, selected_topic
+    return role,selected_topic
 
 
 ##############################
@@ -567,28 +567,37 @@ def display_question(q, topic):
     st.info(st.session_state.current_reason)
     st.markdown(f"**Bloom:** '{q['bloom_level']}' | **Question Id:** '{q['question_id']}') | **Sub-Concept:** '{q.get('sub_concept', 'General')}' ")
     
-    
+
+   
+
     st.code(q['question_stem'], language='java')
 
-    choice = st.radio("Choose:", ["a", "b", "c", "d"], index=None,
-                      format_func=lambda x: f"{x.upper()}. {q[f'option_{x}']}",
-                      key=f"choice_{q['question_id']}")
-    # confidence = st.slider("Confidence?", 1, 5, 3, key=f"conf_{q['question_id']}",
-    #                        format_func=lambda x: ["Guessing", "Unsure", "Okay", "Confident", "Very Confident"][x-1])
+
+    options_col, confidence_col = st.columns(2)
 
 
-    confidence = st.radio("How confident are you?:", ["😬 Guessing", "🤔 Unsure", "😐 Okay", "🙂 Confident", "😎 Very Confident"], index=None)
+    if options_col:
+
+        choice = st.radio("Choose:", ["a", "b", "c", "d"], index=None,
+                        format_func=lambda x: f"{x.upper()}. {q[f'option_{x}']}",
+                        key=f"choice_{q['question_id']}")
+        # confidence = st.slider("Confidence?", 1, 5, 3, key=f"conf_{q['question_id']}",
+        #                        format_func=lambda x: ["Guessing", "Unsure", "Okay", "Confident", "Very Confident"][x-1])
+
+    if confidence_col:
+        confidence = st.radio("How confident are you about this question?:", ["😬 Guessing", "🤔 Unsure", "😐 Okay", "🙂 Confident", "😎 Very Confident"], index=None)
 
 
-    # confidence = st.slider("How confident are you?", 1, 5, 3, key=f"conf_{q['question_id']}")
-    # confidence_labels = {
-    #     1: "😬 Guessing",
-    #     2: "🤔 Unsure",
-    #     3: "😐 Okay",
-    #     4: "🙂 Confident",
-    #     5: "😎 Very Confident"
-    # }
-    # st.markdown(f"**Selected Confidence:** {confidence_labels[confidence]}")
+        CONFIDENCE_MAP = {
+            "😬 Guessing": 1,
+            "🤔 Unsure": 2,
+            "😐 Okay": 3,
+            "🙂 Confident": 4,
+            "😎 Very Confident": 5
+        }
+
+
+
 
     submit_col, bookmark_col = st.columns(2)
     if bookmark_col.button("🔖 Bookmark", use_container_width=True):
@@ -603,7 +612,10 @@ def display_question(q, topic):
             st.warning("Choose your confidence level.")
 
         else:
-            handle_submission(q, choice, confidence, topic)
+            # handle_submission(q, choice, confidence, topic)
+            numeric_conf = CONFIDENCE_MAP.get(confidence, 3)  # default to neutral
+            handle_submission(q, choice, numeric_conf, topic)
+
             st.session_state.submitted = True
             # st.rerun()
 
@@ -613,51 +625,6 @@ def display_question(q, topic):
             st.session_state.current_question = None
             st.rerun()
 
-# def handle_submission(q, choice, confidence, topic):
-#     correct = q["correct_option"].strip().lower()
-#     is_correct = (choice == correct)
-#     bloom = q["bloom_level"]
-#     points = 0.5 + (confidence / 10.0) if is_correct else 0
-
-#     if is_correct:
-#         st.success(f"Correct! +{points:.2f} points.")
-#     else:
-#         st.error(f"Wrong. Correct: **{correct.upper()}**")
-#         if confidence >= 4 and pd.notna(q.get('sub_concept')):
-#             st.session_state.remediation_queue.append(q['sub_concept'])
-
-#     if not st.session_state.review_mode:
-#         st.session_state.topic_mastery[topic][bloom] += points
-#         st.session_state.score[topic][bloom]["total"] += 1
-#         st.session_state.score[topic][bloom]["correct"] += int(is_correct)
-#         st.session_state.confidence_record[topic].setdefault(bloom, []).append({
-#             'question_id': q['question_id'],
-#             'confidence': confidence,
-#             'correct': is_correct
-#         })
-
-#     # Log result
-#     st.session_state.log.append({
-#         # "timestamp": time.time(),
-#         "timestamp": pd.Timestamp.now().isoformat(),
-#         "session_id": st.session_state.session_id,
-#         "topic": topic,
-#         "bloom_level": bloom,
-#         "question_id": q['question_id'],
-#         "confidence": confidence,
-#         "correct": is_correct,
-#         "reinforcement": st.session_state.current_reason
-#     })
-
-#     # Explanation
-#     with st.expander("📘 Explanation"):
-#         st.markdown(q['main_explanation'])
-
-#     # Save logs to CSV
-#     log_df = pd.DataFrame(st.session_state.log)
-#     os.makedirs("logs", exist_ok=True)
-#     log_df.to_csv(f"logs/session_{st.session_state.session_id}.csv", index=False)
-#     check_for_bloom_badge(topic, bloom)
 
 
 def handle_submission(q, choice, confidence, topic):
