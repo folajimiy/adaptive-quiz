@@ -1,0 +1,13 @@
+reportlab>=3.6
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+openai
+anthropic
+google-generativeai
+deepseek
+python-dotenv
+scikit-learn
+pyyaml

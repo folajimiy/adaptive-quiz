@@ -1,0 +1,1 @@
+Place all your .pptx lecture slide files in this directory.

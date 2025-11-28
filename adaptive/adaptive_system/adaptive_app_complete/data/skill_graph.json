@@ -1,0 +1,17 @@
+{
+    "Java Fundamentals": {
+        "prerequisites": []
+    },
+    "Variables": {
+        "prerequisites": ["Java Fundamentals"]
+    },
+    "Data Types": {
+        "prerequisites": ["Variables"]
+    },
+    "Assignment": {
+        "prerequisites": ["Variables", "Data Types"]
+    },
+    "Arrays": {
+        "prerequisites": ["Data Types"]
+    }
+}
